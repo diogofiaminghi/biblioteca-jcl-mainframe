@@ -1,0 +1,1 @@
+arquivo declare gen
