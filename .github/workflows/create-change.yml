@@ -66,8 +66,6 @@ jobs:
 
       - name: Gerar JCL
         run: |
-          DIR=$(ls -d executions/*/* | tail -1)
-
           MAIN=$(cat templates/main.jcl)
           BIND=$(cat templates/bind.jclpart)
           REBUILD=$(cat templates/rebuild.jclpart)
