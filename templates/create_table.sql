@@ -1,0 +1,3 @@
+CREATE TABLE {{CSS}}.{{TABLE_NAME}} (
+{{COLUMNS}}
+);
