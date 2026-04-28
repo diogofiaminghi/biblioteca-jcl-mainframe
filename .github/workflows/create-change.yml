@@ -20,8 +20,8 @@ on:
         description: "User mainframe (ex: A170580)"
         required: true
 
-      columns:
-        description: "Colunas (formato: ID:INT:10,NOME:CHAR:50)"
+      ddl_sql:
+        description: "Cole o DDL completo"
         required: true
 
 jobs:
@@ -29,10 +29,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Criar estrutura e YAML
+      - name: Criar estrutura
         run: |
           DATE=$(date +%Y-%m-%d)
           DIR="executions/${{ github.event.inputs.environment }}/$DATE"_create_"${{ github.event.inputs.table_name }}"
@@ -40,10 +39,12 @@ jobs:
           mkdir -p $DIR/generated
           mkdir -p $DIR/logs
 
-          echo "Criando YAML..."
+      - name: Salvar YAML
+        run: |
+          DIR=$(ls -d executions/*/* | tail -1)
 
           echo "change:" > $DIR/input.yml
-          echo "  id: CHG-$DATE" >> $DIR/input.yml
+          echo "  id: CHG-$(date +%Y%m%d)" >> $DIR/input.yml
           echo "  environment: ${{ github.event.inputs.environment }}" >> $DIR/input.yml
 
           echo "mainframe:" >> $DIR/input.yml
@@ -54,28 +55,45 @@ jobs:
           echo "  system_code: ${{ github.event.inputs.system_code }}" >> $DIR/input.yml
           echo "  table_name: ${{ github.event.inputs.table_name }}" >> $DIR/input.yml
 
-          echo "columns:" >> $DIR/input.yml
+          echo "ddl:" >> $DIR/input.yml
+          echo "  sql: |" >> $DIR/input.yml
 
-          IFS=',' read -ra COLS <<< "${{ github.event.inputs.columns }}"
-          for col in "${COLS[@]}"; do
-            NAME=$(echo $col | cut -d: -f1)
-            TYPE=$(echo $col | cut -d: -f2)
-            SIZE=$(echo $col | cut -d: -f3)
+          while IFS= read -r line; do
+            echo "    $line" >> $DIR/input.yml
+          done <<< "${{ github.event.inputs.ddl_sql }}"
 
-            echo "  - name: $NAME" >> $DIR/input.yml
-            echo "    type: $TYPE" >> $DIR/input.yml
-            echo "    size: $SIZE" >> $DIR/input.yml
-          done
-
-      - name: Gerar JCL simples
+      - name: Gerar JCL
         run: |
-          echo "//JOB001 JOB (ACCT),'DB2 FLOW'" > final.jcl
-          echo "// SET USR=${{ github.event.inputs.user_id }}" >> final.jcl
+          DIR=$(ls -d executions/*/* | tail -1)
 
-      - name: Upload artefatos
+          MAIN=$(cat templates/main.jcl)
+          BIND=$(cat templates/bind.jclpart)
+          REBUILD=$(cat templates/rebuild.jclpart)
+          DECLGEN=$(cat templates/declare_gen.jclpart)
+
+          MAIN=${MAIN//\{\{USER_ID\}\}/${{ github.event.inputs.user_id }}}
+          MAIN=${MAIN//\{\{DB2_SUBSYSTEM\}\}/DB2P}
+          MAIN=${MAIN//\{\{RUNLIB\}\}/DSN!!0.RUNLIB.LOAD}
+          MAIN=${MAIN//\{\{SYSTEM_CODE\}\}/${{ github.event.inputs.system_code }}}
+          MAIN=${MAIN//\{\{TABLE_NAME\}\}/${{ github.event.inputs.table_name }}}
+
+          MAIN=${MAIN//\{\{DDL_SQL\}\}/${{ github.event.inputs.ddl_sql }}}
+          MAIN=${MAIN//\{\{BIND_STEP\}\}/$BIND}
+          MAIN=${MAIN//\{\{REBUILD_STEP\}\}/$REBUILD}
+          MAIN=${MAIN//\{\{DECLGEN_STEP\}\}/$DECLGEN}
+
+          echo "$MAIN" > $DIR/generated/final.jcl
+
+      - name: Upload artefato
         uses: actions/upload-artifact@v4
         with:
-          name: output
-          path: |
-            executions/
-            final.jcl
+          name: jcl-gerado
+          path: executions/
+
+      - name: Commit automático
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add executions/
+          git commit -m "Nova mudança DB2"
+          git push
