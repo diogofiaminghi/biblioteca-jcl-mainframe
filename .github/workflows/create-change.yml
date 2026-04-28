@@ -39,6 +39,8 @@ jobs:
           mkdir -p $DIR/generated
           mkdir -p $DIR/logs
 
+          echo "DIR=$DIR" >> $GITHUB_ENV
+
       - name: Salvar YAML
         run: |
           DIR=$(ls -d executions/*/* | tail -1)
