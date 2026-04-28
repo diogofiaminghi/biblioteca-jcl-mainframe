@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Ambiente (DESE/HOMO/PROD)"
+        description: "Ambiente (DEV/HML/PRD)"
         required: true
-        default: "DESE"
+        default: "DEV"
 
       system_code:
         description: "Código do sistema (3 letras)"
