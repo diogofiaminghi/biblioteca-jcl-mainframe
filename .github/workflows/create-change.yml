@@ -1,0 +1,81 @@
+name: Create DB2 Change
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Ambiente (DESE/HOMO/PROD)"
+        required: true
+        default: "DESE"
+
+      system_code:
+        description: "Código do sistema (3 letras)"
+        required: true
+
+      table_name:
+        description: "Nome da tabela"
+        required: true
+
+      user_id:
+        description: "User mainframe (ex: A170580)"
+        required: true
+
+      columns:
+        description: "Colunas (formato: ID:INT:10,NOME:CHAR:50)"
+        required: true
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Criar estrutura e YAML
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          DIR="executions/${{ github.event.inputs.environment }}/$DATE"_create_"${{ github.event.inputs.table_name }}"
+
+          mkdir -p $DIR/generated
+          mkdir -p $DIR/logs
+
+          echo "Criando YAML..."
+
+          echo "change:" > $DIR/input.yml
+          echo "  id: CHG-$DATE" >> $DIR/input.yml
+          echo "  environment: ${{ github.event.inputs.environment }}" >> $DIR/input.yml
+
+          echo "mainframe:" >> $DIR/input.yml
+          echo "  user_id: ${{ github.event.inputs.user_id }}" >> $DIR/input.yml
+          echo "  subsystem: DB2P" >> $DIR/input.yml
+
+          echo "object:" >> $DIR/input.yml
+          echo "  system_code: ${{ github.event.inputs.system_code }}" >> $DIR/input.yml
+          echo "  table_name: ${{ github.event.inputs.table_name }}" >> $DIR/input.yml
+
+          echo "columns:" >> $DIR/input.yml
+
+          IFS=',' read -ra COLS <<< "${{ github.event.inputs.columns }}"
+          for col in "${COLS[@]}"; do
+            NAME=$(echo $col | cut -d: -f1)
+            TYPE=$(echo $col | cut -d: -f2)
+            SIZE=$(echo $col | cut -d: -f3)
+
+            echo "  - name: $NAME" >> $DIR/input.yml
+            echo "    type: $TYPE" >> $DIR/input.yml
+            echo "    size: $SIZE" >> $DIR/input.yml
+          done
+
+      - name: Gerar JCL simples
+        run: |
+          echo "//JOB001 JOB (ACCT),'DB2 FLOW'" > final.jcl
+          echo "// SET USR=${{ github.event.inputs.user_id }}" >> final.jcl
+
+      - name: Upload artefatos
+        uses: actions/upload-artifact@v4
+        with:
+          name: output
+          path: |
+            executions/
+            final.jcl
